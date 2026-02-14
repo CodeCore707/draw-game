@@ -1,112 +1,103 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Draw Game</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
-body { font-family: sans-serif; text-align:center; margin:0; }
-canvas { border:1px solid black; width:95vw; max-width:600px; height:60vh; }
-#scoreboard { margin:10px; }
-button { padding:10px; margin:5px; }
-input { padding:8px; }
+body{
+  background:black;
+  color:#0ff;
+  text-align:center;
+  font-family:Arial;
+}
+button{
+  background:#111;
+  border:1px solid #0ff;
+  color:#0ff;
+  padding:10px;
+  margin:5px;
+}
+#chatBox{
+  height:150px;
+  overflow:auto;
+  border:1px solid #0ff;
+}
 </style>
 </head>
 <body>
 
-<h2>🎨 Draw Battle</h2>
+<h2>🎨 Draw Game</h2>
 
-<div id="menu">
-<input id="name" placeholder="이름">
+<div id="online"></div>
+
+<button onclick="guestLogin()">게스트로 시작</button>
 <button onclick="createRoom()">방 만들기</button>
-<input id="roomCode" placeholder="방 코드">
-<button onclick="joinRoom()">입장</button>
-</div>
+
+<br><br>
+
+<input id="roomInput" placeholder="방 코드 입력">
+<button onclick="joinRoom()">방 참가</button>
 
 <h3 id="roomInfo"></h3>
-<p id="info"></p>
-<p>⏳ <span id="timer">60</span></p>
 
-<canvas id="board"></canvas>
+<div id="chatBox"></div>
 
-<div>
-<input id="chatInput" placeholder="정답 입력">
+<input id="chatInput" placeholder="메시지">
 <button onclick="sendChat()">전송</button>
-</div>
-
-<div id="scoreboard"></div>
 
 <script>
 const socket = io();
-const canvas = document.getElementById("board");
-const ctx = canvas.getContext("2d");
+let username = "";
+let roomCode = "";
 
-canvas.width = canvas.offsetWidth;
-canvas.height = canvas.offsetHeight;
-
-let drawing=false, canDraw=false, roomCode="";
-
-canvas.addEventListener("mousedown",()=>drawing=true);
-canvas.addEventListener("mouseup",()=>drawing=false);
-canvas.addEventListener("mousemove",(e)=>{
- if(!drawing||!canDraw)return;
- const rect=canvas.getBoundingClientRect();
- const x=e.clientX-rect.left;
- const y=e.clientY-rect.top;
- ctx.fillRect(x,y,3,3);
- socket.emit("draw",{code:roomCode,data:{x,y}});
+socket.on("onlineCount",(count)=>{
+  document.getElementById("online").innerText =
+    "🌐 현재 접속자: " + count + "명";
 });
 
-socket.on("draw",(data)=>ctx.fillRect(data.x,data.y,3,3));
+function guestLogin(){
+  socket.emit("guestLogin");
+}
+
+socket.on("guestAssigned",(name)=>{
+  username = name;
+  alert("이름: " + name);
+});
 
 function createRoom(){
- const name=document.getElementById("name").value;
- socket.emit("createRoom",name);
+  socket.emit("createRoom");
 }
+
+socket.on("roomCreated",(data)=>{
+  roomCode = data.code;
+  document.getElementById("roomInfo").innerText =
+    "방 코드: " + data.code;
+  alert("초대 링크: " + data.link);
+});
 
 function joinRoom(){
- const name=document.getElementById("name").value;
- roomCode=document.getElementById("roomCode").value.toUpperCase();
- socket.emit("joinRoom",{code:roomCode,name});
- document.getElementById("roomInfo").innerText="방 코드: "+roomCode;
+  roomCode = document.getElementById("roomInput").value;
+  socket.emit("joinRoom",roomCode);
+  document.getElementById("roomInfo").innerText =
+    "참가한 방: " + roomCode;
 }
-
-socket.on("roomCreated",(code)=>{
- roomCode=code;
- document.getElementById("roomInfo").innerText="방 코드: "+code;
-});
 
 function sendChat(){
- const msg=document.getElementById("chatInput").value;
- socket.emit("chat",{code:roomCode,msg});
- document.getElementById("chatInput").value="";
+  const message = document.getElementById("chatInput").value;
+  socket.emit("chatMessage",{
+    code:roomCode,
+    message:message,
+    username:username
+  });
+  document.getElementById("chatInput").value="";
 }
 
-socket.on("updateUsers",(users)=>{
- let html="<h3>🏆 점수판</h3>";
- for(const id in users){
-   html+=users[id].name+" : "+users[id].score+"점<br>";
- }
- document.getElementById("scoreboard").innerHTML=html;
-});
-
-socket.on("newRound",(data)=>{
- ctx.clearRect(0,0,canvas.width,canvas.height);
- document.getElementById("info").innerText="단어 길이: "+data.wordLength;
- canDraw=false;
-});
-
-socket.on("yourTurn",(word)=>{
- document.getElementById("info").innerText="그릴 차례! 단어: "+word;
- canDraw=true;
-});
-
-socket.on("timer",(time)=>{
- document.getElementById("timer").innerText=time;
-});
-
-socket.on("roundEnd",(word)=>{
- alert("라운드 종료! 정답: "+word);
- canDraw=false;
+socket.on("chatMessage",(data)=>{
+  const chatBox = document.getElementById("chatBox");
+  chatBox.innerHTML +=
+    "<div><b>"+data.username+":</b> "+data.message+"</div>";
+  chatBox.scrollTop = chatBox.scrollHeight;
 });
 </script>
 
