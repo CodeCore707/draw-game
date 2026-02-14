@@ -1,15 +1,11 @@
 {
-  "name": "draw-battle-final",
+  "name": "tetris-2p",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "bcrypt": "^5.1.0",
-    "multer": "^1.4.5",
-    "bad-words": "^3.0.4"
+    "express": "^4.18.2"
   }
 }
