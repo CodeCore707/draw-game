@@ -1,26 +1,29 @@
-body{
-  margin:0;
-  background:#0f0f1a;
-  color:white;
-  font-family:Arial;
-  text-align:center;
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  background: #f4f4f4;
 }
 
-#canvas{
-  width:95vw;
-  max-width:600px;
-  height:60vh;
-  background:white;
-  border-radius:10px;
-  box-shadow:0 0 20px #00f7ff;
-  touch-action:none;
+.container {
+  display: flex;
+  justify-content: center;
+  gap: 50px;
+  margin: 20px;
 }
 
-.color{
-  width:30px;
-  height:30px;
-  border-radius:50%;
-  display:inline-block;
-  margin:5px;
-  border:2px solid white;
+canvas {
+  background: #111;
+  border: 3px solid #333;
+}
+
+.player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+button {
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
 }
