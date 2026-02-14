@@ -1,119 +1,161 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const bcrypt = require("bcrypt");
+const multer = require("multer");
+const Filter = require("bad-words");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+app.use(express.json());
 app.use(express.static("public"));
+app.use("/uploads", express.static("uploads"));
 
-const rooms = {};
-const words = [
-"피카츄","치킨","축구공","강아지","고양이","햄버거","자동차","비행기","공룡","마법사",
-"토끼","우주","눈사람","로봇","유령","스마트폰","컴퓨터","딸기","수박","바나나",
-"아이스크림","호랑이","사자","곰","판다","고래","상어","문어","오징어","거북이",
-"연필","지우개","책","의자","침대","텔레비전","냉장고","세탁기","드론","마이크",
-"기타","피아노","드럼","농구공","야구","수영","자전거","스케이트","눈","비",
-"태양","달","별","무지개","번개","구름","불","물","얼음","모래",
-"산","바다","강","폭포","섬","사막","숲","나무","꽃","장미",
-"케이크","초콜릿","사탕","라면","떡볶이","김치","삼겹살","치즈","커피","콜라",
-"버스","기차","지하철","택시","우주선","외계인","닌자","해적","왕","공주",
-"기사","요리사","의사","경찰","소방관","선생님","학생","좀비","괴물","영웅"
-];
+const filter = new Filter();
 
-function createRoomCode() {
-  return Math.random().toString(36).substring(2, 7).toUpperCase();
-}
+let users = {};
+let rooms = {};
+let guestCount = 1;
+let onlineUsers = 0;
 
-io.on("connection", (socket) => {
+const TURN_TIME = 60;
+const words = ["피카츄","치킨","축구공","강아지","고양이","햄버거","자동차","비행기","공룡","마법사"];
 
-  socket.on("joinRoom", ({ name, code }) => {
+const storage = multer.diskStorage({
+  destination: "uploads/",
+  filename: (req,file,cb)=>{
+    cb(null, Date.now()+"-"+file.originalname);
+  }
+});
+const upload = multer({ storage });
 
-    if (!rooms[code]) {
-      rooms[code] = {
-        players: [],
-        turn: 0,
-        word: "",
-        time: 60,
-        scores: {}
+/* 회원가입 */
+app.post("/register", async (req,res)=>{
+  const { username, password } = req.body;
+  if(users[username]) return res.json({success:false});
+
+  const hash = await bcrypt.hash(password,10);
+  users[username] = { password: hash, profile:null };
+  res.json({success:true});
+});
+
+/* 로그인 */
+app.post("/login", async (req,res)=>{
+  const { username, password } = req.body;
+  const user = users[username];
+  if(!user) return res.json({success:false});
+
+  const match = await bcrypt.compare(password,user.password);
+  if(!match) return res.json({success:false});
+
+  res.json({success:true, profile:user.profile});
+});
+
+/* 프로필 업로드 */
+app.post("/uploadProfile", upload.single("profile"), (req,res)=>{
+  const { username } = req.body;
+  users[username].profile = "/uploads/"+req.file.filename;
+  res.json({imageUrl:users[username].profile});
+});
+
+/* 소켓 */
+io.on("connection",(socket)=>{
+
+  onlineUsers++;
+  io.emit("onlineCount", onlineUsers);
+
+  socket.on("guestLogin",()=>{
+    const name = "Guest"+guestCount++;
+    socket.emit("guestAssigned",name);
+  });
+
+  socket.on("joinRoom",({name,code})=>{
+
+    if(!rooms[code]){
+      rooms[code]={
+        players:[],
+        turn:-1,
+        word:"",
+        scores:{},
+        timer:null,
+        timeLeft:TURN_TIME
       };
     }
 
     socket.join(code);
-    socket.data.name = name;
-    socket.data.room = code;
+    socket.data.name=name;
+    socket.data.room=code;
 
     rooms[code].players.push(socket.id);
-    rooms[code].scores[name] = 0;
+    rooms[code].scores[name]=0;
 
-    io.to(code).emit("updatePlayers", getPlayerNames(code));
+    io.to(code).emit("updatePlayers",getPlayerNames(code));
   });
 
-  socket.on("startGame", () => {
-    const room = rooms[socket.data.room];
-    if (!room) return;
-
+  socket.on("startGame",()=>{
     nextTurn(socket.data.room);
   });
 
-  socket.on("draw", (data) => {
-    socket.to(socket.data.room).emit("draw", data);
+  socket.on("draw",(data)=>{
+    socket.to(socket.data.room).emit("draw",data);
   });
 
-  socket.on("guess", (msg) => {
-    const room = rooms[socket.data.room];
-    if (!room) return;
+  socket.on("guess",(msg)=>{
+    const room=rooms[socket.data.room];
+    if(!room) return;
 
-    if (msg === room.word) {
-      room.scores[socket.data.name] += 10;
-      io.to(socket.data.room).emit("correct", socket.data.name);
+    if(filter.isProfane(msg)) msg="🤐";
+
+    if(msg===room.word){
+      room.scores[socket.data.name]+=10;
+      io.to(socket.data.room).emit("scoreUpdate",room.scores);
       nextTurn(socket.data.room);
-    } else {
-      io.to(socket.data.room).emit("chat", {
-        name: socket.data.name,
-        msg
-      });
+    }else{
+      io.to(socket.data.room).emit("chat",{name:socket.data.name,msg});
     }
   });
 
-  socket.on("disconnect", () => {
-    const room = rooms[socket.data.room];
-    if (!room) return;
-
-    room.players = room.players.filter(id => id !== socket.id);
-    delete room.scores[socket.data.name];
-
-    io.to(socket.data.room).emit("updatePlayers", getPlayerNames(socket.data.room));
+  socket.on("disconnect",()=>{
+    onlineUsers--;
+    io.emit("onlineCount", onlineUsers);
   });
 
 });
 
-function nextTurn(code) {
-  const room = rooms[code];
-  if (!room || room.players.length === 0) return;
+function nextTurn(code){
+  const room=rooms[code];
+  if(!room) return;
 
-  room.turn = (room.turn + 1) % room.players.length;
-  room.word = words[Math.floor(Math.random() * words.length)];
+  if(room.timer) clearInterval(room.timer);
 
-  const currentDrawer = room.players[room.turn];
+  room.turn=(room.turn+1)%room.players.length;
+  room.word=words[Math.floor(Math.random()*words.length)];
+  room.timeLeft=TURN_TIME;
 
-  io.to(code).emit("newTurn", {
-    drawer: currentDrawer,
-    wordLength: room.word.length,
-    scores: room.scores
+  const currentDrawer=room.players[room.turn];
+
+  io.to(code).emit("newTurn",{
+    drawer:currentDrawer,
+    scores:room.scores,
+    wordLength:room.word.length
   });
 
-  io.to(currentDrawer).emit("yourWord", room.word);
+  io.to(currentDrawer).emit("yourWord",room.word);
+
+  room.timer=setInterval(()=>{
+    room.timeLeft--;
+    io.to(code).emit("timer",room.timeLeft);
+    if(room.timeLeft<=0) nextTurn(code);
+  },1000);
 }
 
-function getPlayerNames(code) {
-  const room = rooms[code];
-  if (!room) return [];
-  return room.players.map(id => {
-    const s = io.sockets.sockets.get(id);
+function getPlayerNames(code){
+  return rooms[code].players.map(id=>{
+    const s=io.sockets.sockets.get(id);
     return s?.data.name;
   });
 }
 
-server.listen(process.env.PORT || 3000);
+server.listen(process.env.PORT||3000);
