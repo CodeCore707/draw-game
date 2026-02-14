@@ -1,45 +1,49 @@
-const socket = io();
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+const socket=io();
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
 
-let drawing = false;
+canvas.width=canvas.offsetWidth;
+canvas.height=canvas.offsetHeight;
 
-canvas.addEventListener("mousedown", () => drawing = true);
-canvas.addEventListener("mouseup", () => drawing = false);
-canvas.addEventListener("mousemove", (e) => {
-  if (!drawing) return;
+let drawing=false;
+let currentColor="black";
 
-  const x = e.offsetX;
-  const y = e.offsetY;
+function setColor(c){currentColor=c;}
 
-  ctx.fillRect(x, y, 4, 4);
-
-  socket.emit("draw", { x, y });
-});
-
-socket.on("draw", (data) => {
-  ctx.fillRect(data.x, data.y, 4, 4);
-});
-
-document.getElementById("guessInput").addEventListener("keypress", e => {
-  if (e.key === "Enter") {
-    socket.emit("guess", e.target.value);
-    e.target.value = "";
-  }
-});
-
-function startGame() {
-  socket.emit("startGame");
+function draw(x,y){
+  ctx.fillStyle=currentColor;
+  ctx.fillRect(x,y,4,4);
+  socket.emit("draw",{x,y,color:currentColor});
 }
 
-socket.on("chat", (data) => {
-  document.getElementById("chat").innerHTML += `<div>${data.name}: ${data.msg}</div>`;
+canvas.addEventListener("mousedown",()=>drawing=true);
+canvas.addEventListener("mouseup",()=>drawing=false);
+canvas.addEventListener("mousemove",(e)=>{
+  if(!drawing) return;
+  draw(e.offsetX,e.offsetY);
 });
 
-socket.on("updatePlayers", (players) => {
-  document.getElementById("players").innerText = players.join(", ");
+canvas.addEventListener("touchstart",()=>drawing=true);
+canvas.addEventListener("touchend",()=>drawing=false);
+canvas.addEventListener("touchmove",(e)=>{
+  const rect=canvas.getBoundingClientRect();
+  const t=e.touches[0];
+  draw(t.clientX-rect.left,t.clientY-rect.top);
 });
 
-socket.on("yourWord", (word) => {
-  alert("너의 단어: " + word);
+socket.on("draw",(data)=>{
+  ctx.fillStyle=data.color;
+  ctx.fillRect(data.x,data.y,4,4);
+});
+
+socket.on("timer",(t)=>{
+  document.getElementById("timer").innerText=t;
+});
+
+socket.on("scoreUpdate",(scores)=>{
+  let html="";
+  for(let n in scores){
+    html+=`<div>${n} : ${scores[n]}</div>`;
+  }
+  document.getElementById("scoreBoard").innerHTML=html;
 });
