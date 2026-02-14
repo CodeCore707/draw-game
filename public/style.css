@@ -1,0 +1,35 @@
+body {
+  margin:0;
+  background:#0f0f1a;
+  color:white;
+  font-family: Arial;
+}
+
+#topBar {
+  display:flex;
+  justify-content:space-between;
+  padding:10px;
+  background:#111;
+  border-bottom:2px solid #00f7ff;
+}
+
+#canvas {
+  background:white;
+  border-radius:10px;
+  box-shadow:0 0 20px #00f7ff;
+}
+
+button {
+  background:#00f7ff;
+  border:none;
+  padding:8px 12px;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+#chat {
+  height:150px;
+  overflow-y:auto;
+  background:#111;
+  padding:10px;
+}
