@@ -1,35 +1,26 @@
-body {
+body{
   margin:0;
   background:#0f0f1a;
   color:white;
-  font-family: Arial;
+  font-family:Arial;
+  text-align:center;
 }
 
-#topBar {
-  display:flex;
-  justify-content:space-between;
-  padding:10px;
-  background:#111;
-  border-bottom:2px solid #00f7ff;
-}
-
-#canvas {
+#canvas{
+  width:95vw;
+  max-width:600px;
+  height:60vh;
   background:white;
   border-radius:10px;
   box-shadow:0 0 20px #00f7ff;
+  touch-action:none;
 }
 
-button {
-  background:#00f7ff;
-  border:none;
-  padding:8px 12px;
-  border-radius:8px;
-  cursor:pointer;
-}
-
-#chat {
-  height:150px;
-  overflow-y:auto;
-  background:#111;
-  padding:10px;
+.color{
+  width:30px;
+  height:30px;
+  border-radius:50%;
+  display:inline-block;
+  margin:5px;
+  border:2px solid white;
 }
