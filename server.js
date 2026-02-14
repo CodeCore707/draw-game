@@ -1,187 +1,119 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const sqlite3 = require("sqlite3").verbose();
-const bcrypt = require("bcrypt");
-const multer = require("multer");
-const path = require("path");
-const { createClient } = require("redis");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.json());
 app.use(express.static("public"));
 
-/* ================= DB ================= */
+const rooms = {};
+const words = [
+"피카츄","치킨","축구공","강아지","고양이","햄버거","자동차","비행기","공룡","마법사",
+"토끼","우주","눈사람","로봇","유령","스마트폰","컴퓨터","딸기","수박","바나나",
+"아이스크림","호랑이","사자","곰","판다","고래","상어","문어","오징어","거북이",
+"연필","지우개","책","의자","침대","텔레비전","냉장고","세탁기","드론","마이크",
+"기타","피아노","드럼","농구공","야구","수영","자전거","스케이트","눈","비",
+"태양","달","별","무지개","번개","구름","불","물","얼음","모래",
+"산","바다","강","폭포","섬","사막","숲","나무","꽃","장미",
+"케이크","초콜릿","사탕","라면","떡볶이","김치","삼겹살","치즈","커피","콜라",
+"버스","기차","지하철","택시","우주선","외계인","닌자","해적","왕","공주",
+"기사","요리사","의사","경찰","소방관","선생님","학생","좀비","괴물","영웅"
+];
 
-const db = new sqlite3.Database("./users.db");
-
-db.run(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE,
-  password TEXT,
-  avatar TEXT
-)
-`);
-
-/* ================= Redis (안전 버전) ================= */
-
-let redisClient = null;
-
-if (process.env.REDIS_URL) {
-  redisClient = createClient({
-    url: process.env.REDIS_URL
-  });
-
-  redisClient.on("error", (err) => {
-    console.log("Redis Error:", err);
-  });
-
-  redisClient.connect()
-    .then(() => console.log("Redis Connected"))
-    .catch((err) => console.log("Redis Connect Failed:", err));
-} else {
-  console.log("No REDIS_URL found. Running without Redis.");
+function createRoomCode() {
+  return Math.random().toString(36).substring(2, 7).toUpperCase();
 }
 
-/* ================= 업로드 ================= */
+io.on("connection", (socket) => {
 
-const storage = multer.diskStorage({
-  destination: "public/uploads/",
-  filename: (req,file,cb)=>{
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
-});
+  socket.on("joinRoom", ({ name, code }) => {
 
-const upload = multer({storage});
-
-/* ================= 기본 변수 ================= */
-
-let rooms = {};
-let onlineUsers = 0;
-let guestCount = 1;
-
-const badWords = ["바보","멍청이","욕1"];
-
-function filterMessage(message){
-  let filtered = message;
-  badWords.forEach(word=>{
-    const regex = new RegExp(word,"gi");
-    filtered = filtered.replace(regex,"***");
-  });
-  return filtered;
-}
-
-/* ================= 로그인 ================= */
-
-app.post("/register", async (req,res)=>{
-  const {username,password} = req.body;
-  const hashed = await bcrypt.hash(password,10);
-
-  db.run(
-    "INSERT INTO users (username,password) VALUES (?,?)",
-    [username,hashed],
-    (err)=>{
-      if(err) return res.json({success:false});
-      res.json({success:true});
+    if (!rooms[code]) {
+      rooms[code] = {
+        players: [],
+        turn: 0,
+        word: "",
+        time: 60,
+        scores: {}
+      };
     }
-  );
-});
-
-app.post("/login",(req,res)=>{
-  const {username,password} = req.body;
-
-  db.get(
-    "SELECT * FROM users WHERE username=?",
-    [username],
-    async (err,user)=>{
-      if(!user) return res.json({success:false});
-      const match = await bcrypt.compare(password,user.password);
-      res.json({success:match});
-    }
-  );
-});
-
-/* ================= 프로필 사진 ================= */
-
-app.post("/upload-avatar", upload.single("avatar"), (req,res)=>{
-  const username = req.body.username;
-  const filePath = "/uploads/" + req.file.filename;
-
-  db.run(
-    "UPDATE users SET avatar=? WHERE username=?",
-    [filePath, username],
-    ()=>res.json({success:true,path:filePath})
-  );
-});
-
-/* ================= 소켓 ================= */
-
-io.on("connection",(socket)=>{
-
-  onlineUsers++;
-  io.emit("onlineCount",onlineUsers);
-
-  socket.on("disconnect",()=>{
-    onlineUsers--;
-    io.emit("onlineCount",onlineUsers);
-  });
-
-  /* ===== 게스트 ===== */
-  socket.on("guestLogin",()=>{
-    const guestName = "Guest" + guestCount++;
-    socket.emit("guestAssigned",guestName);
-  });
-
-  /* ===== 방 생성 ===== */
-  socket.on("createRoom", async ()=>{
-    const code = Math.random().toString(36).substring(2,6).toUpperCase();
-
-    rooms[code] = { users:{} };
-
-    // Redis 있을 때만 저장
-    if(redisClient){
-      await redisClient.set("room:"+code, JSON.stringify(rooms[code]));
-    }
-
-    socket.emit("roomCreated",{
-      code,
-      link: `/?room=${code}`
-    });
-  });
-
-  /* ===== 방 입장 ===== */
-  socket.on("joinRoom", async (code)=>{
-
-    if(!rooms[code] && redisClient){
-      const data = await redisClient.get("room:"+code);
-      if(data){
-        rooms[code] = JSON.parse(data);
-      }
-    }
-
-    if(!rooms[code]) return;
 
     socket.join(code);
+    socket.data.name = name;
+    socket.data.room = code;
+
+    rooms[code].players.push(socket.id);
+    rooms[code].scores[name] = 0;
+
+    io.to(code).emit("updatePlayers", getPlayerNames(code));
   });
 
-  /* ===== 채팅 ===== */
-  socket.on("chatMessage",(data)=>{
-    const cleanMessage = filterMessage(data.message);
+  socket.on("startGame", () => {
+    const room = rooms[socket.data.room];
+    if (!room) return;
 
-    io.to(data.code).emit("chatMessage",{
-      username:data.username,
-      message:cleanMessage
-    });
+    nextTurn(socket.data.room);
+  });
+
+  socket.on("draw", (data) => {
+    socket.to(socket.data.room).emit("draw", data);
+  });
+
+  socket.on("guess", (msg) => {
+    const room = rooms[socket.data.room];
+    if (!room) return;
+
+    if (msg === room.word) {
+      room.scores[socket.data.name] += 10;
+      io.to(socket.data.room).emit("correct", socket.data.name);
+      nextTurn(socket.data.room);
+    } else {
+      io.to(socket.data.room).emit("chat", {
+        name: socket.data.name,
+        msg
+      });
+    }
+  });
+
+  socket.on("disconnect", () => {
+    const room = rooms[socket.data.room];
+    if (!room) return;
+
+    room.players = room.players.filter(id => id !== socket.id);
+    delete room.scores[socket.data.name];
+
+    io.to(socket.data.room).emit("updatePlayers", getPlayerNames(socket.data.room));
   });
 
 });
 
-/* ================= 서버 실행 ================= */
+function nextTurn(code) {
+  const room = rooms[code];
+  if (!room || room.players.length === 0) return;
 
-server.listen(process.env.PORT || 3000, ()=>{
-  console.log("Server running...");
-});
+  room.turn = (room.turn + 1) % room.players.length;
+  room.word = words[Math.floor(Math.random() * words.length)];
+
+  const currentDrawer = room.players[room.turn];
+
+  io.to(code).emit("newTurn", {
+    drawer: currentDrawer,
+    wordLength: room.word.length,
+    scores: room.scores
+  });
+
+  io.to(currentDrawer).emit("yourWord", room.word);
+}
+
+function getPlayerNames(code) {
+  const room = rooms[code];
+  if (!room) return [];
+  return room.players.map(id => {
+    const s = io.sockets.sockets.get(id);
+    return s?.data.name;
+  });
+}
+
+server.listen(process.env.PORT || 3000);
