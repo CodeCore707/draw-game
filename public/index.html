@@ -1,21 +1,31 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-  <title>Draw Battle</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="/socket.io/socket.io.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>2인 테트리스</title>
+<link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 
-<div id="topBar">
-  <div>플레이어: <span id="players"></span></div>
-  <button onclick="startGame()">게임 시작</button>
+<h1>2인 테트리스 점수 대결</h1>
+
+<div class="container">
+  <div class="player">
+    <h2>Player 1</h2>
+    <canvas id="board1" width="200" height="400"></canvas>
+    <div class="score">Score: <span id="score1">0</span></div>
+  </div>
+
+  <div class="player">
+    <h2>Player 2</h2>
+    <canvas id="board2" width="200" height="400"></canvas>
+    <div class="score">Score: <span id="score2">0</span></div>
+  </div>
 </div>
 
-<canvas id="canvas" width="600" height="400"></canvas>
-
-<div id="chat"></div>
-<input id="guessInput" placeholder="정답 입력"/>
+<button onclick="startGame()">게임 시작</button>
+<h2 id="winner"></h2>
 
 <script src="game.js"></script>
 </body>
