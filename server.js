@@ -27,13 +27,25 @@ CREATE TABLE IF NOT EXISTS users (
 )
 `);
 
-/* ================= Redis ================= */
+/* ================= Redis (안전 버전) ================= */
 
-const redisClient = createClient({
-  url: process.env.REDIS_URL
-});
+let redisClient = null;
 
-redisClient.connect();
+if (process.env.REDIS_URL) {
+  redisClient = createClient({
+    url: process.env.REDIS_URL
+  });
+
+  redisClient.on("error", (err) => {
+    console.log("Redis Error:", err);
+  });
+
+  redisClient.connect()
+    .then(() => console.log("Redis Connected"))
+    .catch((err) => console.log("Redis Connect Failed:", err));
+} else {
+  console.log("No REDIS_URL found. Running without Redis.");
+}
 
 /* ================= 업로드 ================= */
 
@@ -130,7 +142,10 @@ io.on("connection",(socket)=>{
 
     rooms[code] = { users:{} };
 
-    await redisClient.set("room:"+code, JSON.stringify(rooms[code]));
+    // Redis 있을 때만 저장
+    if(redisClient){
+      await redisClient.set("room:"+code, JSON.stringify(rooms[code]));
+    }
 
     socket.emit("roomCreated",{
       code,
@@ -141,14 +156,14 @@ io.on("connection",(socket)=>{
   /* ===== 방 입장 ===== */
   socket.on("joinRoom", async (code)=>{
 
-    if(!rooms[code]){
+    if(!rooms[code] && redisClient){
       const data = await redisClient.get("room:"+code);
       if(data){
         rooms[code] = JSON.parse(data);
-      }else{
-        return;
       }
     }
+
+    if(!rooms[code]) return;
 
     socket.join(code);
   });
@@ -165,6 +180,8 @@ io.on("connection",(socket)=>{
 
 });
 
-server.listen(3000,()=>{
-  console.log("Server running on port 3000");
+/* ================= 서버 실행 ================= */
+
+server.listen(process.env.PORT || 3000, ()=>{
+  console.log("Server running...");
 });
