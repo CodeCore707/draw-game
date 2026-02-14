@@ -1,105 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Draw Game</title>
-<script src="/socket.io/socket.io.js"></script>
-<style>
-body{
-  background:black;
-  color:#0ff;
-  text-align:center;
-  font-family:Arial;
-}
-button{
-  background:#111;
-  border:1px solid #0ff;
-  color:#0ff;
-  padding:10px;
-  margin:5px;
-}
-#chatBox{
-  height:150px;
-  overflow:auto;
-  border:1px solid #0ff;
-}
-</style>
+  <title>Draw Battle</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 
-<h2>🎨 Draw Game</h2>
+<div id="topBar">
+  <div>플레이어: <span id="players"></span></div>
+  <button onclick="startGame()">게임 시작</button>
+</div>
 
-<div id="online"></div>
+<canvas id="canvas" width="600" height="400"></canvas>
 
-<button onclick="guestLogin()">게스트로 시작</button>
-<button onclick="createRoom()">방 만들기</button>
+<div id="chat"></div>
+<input id="guessInput" placeholder="정답 입력"/>
 
-<br><br>
-
-<input id="roomInput" placeholder="방 코드 입력">
-<button onclick="joinRoom()">방 참가</button>
-
-<h3 id="roomInfo"></h3>
-
-<div id="chatBox"></div>
-
-<input id="chatInput" placeholder="메시지">
-<button onclick="sendChat()">전송</button>
-
-<script>
-const socket = io();
-let username = "";
-let roomCode = "";
-
-socket.on("onlineCount",(count)=>{
-  document.getElementById("online").innerText =
-    "🌐 현재 접속자: " + count + "명";
-});
-
-function guestLogin(){
-  socket.emit("guestLogin");
-}
-
-socket.on("guestAssigned",(name)=>{
-  username = name;
-  alert("이름: " + name);
-});
-
-function createRoom(){
-  socket.emit("createRoom");
-}
-
-socket.on("roomCreated",(data)=>{
-  roomCode = data.code;
-  document.getElementById("roomInfo").innerText =
-    "방 코드: " + data.code;
-  alert("초대 링크: " + data.link);
-});
-
-function joinRoom(){
-  roomCode = document.getElementById("roomInput").value;
-  socket.emit("joinRoom",roomCode);
-  document.getElementById("roomInfo").innerText =
-    "참가한 방: " + roomCode;
-}
-
-function sendChat(){
-  const message = document.getElementById("chatInput").value;
-  socket.emit("chatMessage",{
-    code:roomCode,
-    message:message,
-    username:username
-  });
-  document.getElementById("chatInput").value="";
-}
-
-socket.on("chatMessage",(data)=>{
-  const chatBox = document.getElementById("chatBox");
-  chatBox.innerHTML +=
-    "<div><b>"+data.username+":</b> "+data.message+"</div>";
-  chatBox.scrollTop = chatBox.scrollHeight;
-});
-</script>
-
+<script src="game.js"></script>
 </body>
 </html>
